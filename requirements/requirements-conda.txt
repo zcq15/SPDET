@@ -1,0 +1,14 @@
+python=3.7
+cudatoolkit
+numpy
+pillow
+matplotlib
+tensorboard
+scikit-image
+scikit-learn
+scipy
+tqdm
+pylint
+ipython
+jupyter
+shapely
