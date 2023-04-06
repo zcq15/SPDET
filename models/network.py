@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 from .utils import tensor2img
 from .geometry.rendering import uniform_interpolate,uniform_scatter
-from .omninvs.omninvs import OmniNVS
+# from .omninvs.omninvs import OmniNVS
 from .spdet.spdet import SPDET
 
 def reduce_tensor(tensor: torch.Tensor) -> torch.Tensor:
