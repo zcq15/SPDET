@@ -136,8 +136,8 @@ class Options(object):
                     setattr(self.opt,k,None)
 
         self.opt.imgsize = tuple(self.opt.imgsize)
-        if isinstance(self.opt.hypos,int): self.opt.hypos = [self.opt.hypos]
-        if isinstance(self.opt.ranges,float): self.opt.ranges = [self.opt.ranges]
+        # if isinstance(self.opt.hypos,int): self.opt.hypos = [self.opt.hypos]
+        # if isinstance(self.opt.ranges,float): self.opt.ranges = [self.opt.ranges]
 
         if 'PNVS' in self.opt.dataset:
             self.opt.datadir = os.path.join(self.opt.datadir,'PNVS')
