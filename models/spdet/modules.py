@@ -498,6 +498,7 @@ class Head(nn.Module):
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
             nn.ReLU(True) if non_negative else nn.Identity()
         )
+        torch.nn.init.constant_(self.head[-2].bias,10/64.0)
 
     def forward(self,x):
         depth = self.head(x)
