@@ -80,7 +80,7 @@ class Photometric(torch.nn.Module):
 
 class Perceptual(torch.nn.Module):
     def __init__(self, branch='tar_rgb', target='tar_rgb',valid='src_valid',
-                vgg='vgg19', view='equi', dist='l1',
+                vgg='vgg19', view='cube', dist='l1',
                 indices=[2, 7, 12, 21, 30],
                 weights=[1.0/2.6, 1.0/4.8, 1.0/3.7, 1.0/5.6, 10/1.5]
     ):
