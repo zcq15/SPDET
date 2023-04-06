@@ -1,7 +1,3 @@
-'''
- Code modified from https://github.com/VCL3D/SphericalViewSynthesis
-'''
-
 import torch
 import numpy
 

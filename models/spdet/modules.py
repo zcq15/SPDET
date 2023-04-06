@@ -9,12 +9,94 @@ sys.path.append('..')
 from functools import partial
 import timm
 from ..modules import _make_pad,_make_act,_make_norm
-from ..modules import Upsample,OFU
+from ..modules import spherical_grid_sample
 from .vit import ViTEncoder
 from .panosp import PanoSP
 from .vgg import VggEncoder
-from ..geometry.geometry import uv_grid,xyz_grid
+from ..geometry.geometry import uv_grid,xy_grid
 
+class Upsample(nn.Module):
+    def __init__(self,in_channels, out_channels=None, scale=2, norm=None, act='gelu', mode="bilinear", align_corners=False, force=False):
+        super().__init__()
+        out_channels = out_channels or in_channels // 2
+        self.scale = scale
+        self.pad = _make_pad(1)
+        self.up = nn.Upsample(scale_factor=scale, mode=mode, align_corners=align_corners)
+        if in_channels == out_channels and not force:
+            self.conv = nn.Identity()
+        else:
+            self.conv = nn.Sequential(
+                nn.Conv2d(in_channels,out_channels,1,bias=not norm),
+                _make_norm(norm,out_channels),
+                _make_act(act)
+            )
+        
+    def forward(self,x):
+        x = self.pad(x)
+        x = self.up(x)
+        s = self.scale
+        x = x[:,:,s:-s,s:-s]
+        y = self.conv(x)
+        return y
+
+class OFU(nn.Module):
+    def __init__(self, in_channels, out_channels=None, scale=2, ofu_grid='geo', norm=None, act='gelu', force=False):
+        super().__init__()
+        out_channels = out_channels or in_channels // 2
+        mid_channels = 32
+        self.scale = scale
+        self.ofu_grid_type = ofu_grid
+        self.ofu_grid = None
+        self.xy_grid = None
+        self.pad = _make_pad(1)
+
+        grid_channels = 5
+
+        self.of = nn.Sequential(
+            _make_pad(1),
+            nn.Conv2d(in_channels+grid_channels,mid_channels,kernel_size=3,bias=not norm),
+            _make_norm(norm,mid_channels),
+            _make_act(act),
+            nn.Conv2d(mid_channels,2,1)
+        )
+        if in_channels == out_channels and not force:
+            self.conv = nn.Identity()
+        else:
+            self.conv = nn.Conv2d(in_channels,out_channels,1)
+
+    def register_embed(self,shape):
+        b,_,h,w = shape
+        uv = uv_grid(h,w).view(1,2,h,w)
+        grid = torch.cat([torch.sin(uv[:,:1]),torch.cos(uv[:,:1]),torch.sin(uv[:,1:]),torch.cos(uv[:,1:]),torch.cos(uv[:,:1])*torch.cos(uv[:,1:])],dim=1)
+        self.ofu_grid = grid.expand([b,-1,-1,-1])
+
+    def wraped_sample(self,x):
+
+        b,_,h,w = x.shape
+
+        if self.ofu_grid is None or not self.ofu_grid.shape[0] == b or not tuple(self.ofu_grid.shape[-2:]) == tuple(x.shape[-2:]):
+            self.register_embed(x.shape)
+
+        if self.xy_grid is None or not tuple(self.xy_grid.shape[-2:]) == tuple(x.shape[-2:]):
+            self.xy_grid = xy_grid(h,w).view(1,2,h,w) # indexing='xy'
+
+        of_input = torch.cat([x,self.ofu_grid],dim=1)
+        of = self.of(of_input) # [b,2,h,w]
+        of = of + self.xy_grid # [b,2,h,w]
+        # print(x.shape,of.shape)
+
+        of = of.permute([0,2,3,1]) #[b,h,w,2]
+        y = spherical_grid_sample(x,of,inplace=False,indexing='xy')
+
+        return y
+    
+    def forward(self,x):
+        x = self.pad(x)
+        x = F.interpolate(x,scale_factor=self.scale,mode='bilinear',align_corners=False)
+        x = x[:,:,self.scale:-self.scale,self.scale:-self.scale]
+        y = self.wraped_sample(x)
+        y = self.conv(y)
+        return y
 
 class Transpose(nn.Module):
     def __init__(self, dim0, dim1):
@@ -254,24 +336,11 @@ class Embed(nn.Module):
             for l in range(4-len(self.vgg.out_channels),4):
                 in_channels = self.out_channels[-(4-l)]+self.vgg.out_channels[-(4-l)]
                 out_channels = embed_dim if l == 3 else self.out_channels[-(4-l)]
-                if vgg_embed == 'linear':
-                    embed = nn.Conv2d(in_channels, out_channels, kernel_size=1)
-                elif vgg_embed == 'mlps':
-                    embed = nn.Sequential(
-                        nn.Conv2d(in_channels, out_channels, kernel_size=1,bias=False),
-                        nn.BatchNorm2d(out_channels),
-                        nn.ReLU(True),
-                        # nn.GELU(),
-                        nn.Conv2d(out_channels, out_channels, kernel_size=1),
-                        nn.BatchNorm2d(out_channels),
-                        nn.ReLU(True),
-                    )
-                else:
-                    embed = nn.Sequential(
-                        nn.Conv2d(in_channels, out_channels, kernel_size=1,bias=False),
-                        nn.BatchNorm2d(out_channels),
-                        nn.ReLU(True)
-                    )
+                embed = nn.Sequential(
+                    nn.Conv2d(in_channels, out_channels, kernel_size=1,bias=False),
+                    nn.BatchNorm2d(out_channels),
+                    nn.ReLU(True)
+                )
                 self.add_module('embed'+str(l),embed)
             self.vgg_feats = None
 
@@ -284,51 +353,14 @@ class Embed(nn.Module):
 
     def _register_embed(self,shape,vgg_grid='geo'):
         b,_,h,w = shape
-        if vgg_grid == 'cos':
-            uv = uv_grid(h,w).view(1,2,h,w)
-            grid = torch.cat([torch.cos(uv[:,:1]),torch.cos(uv[:,1:]),torch.cos(uv[:,:1])*torch.cos(uv[:,1:])],dim=1)
-            self.vgg_grid = grid.expand([b,-1,-1,-1])
-        elif vgg_grid == 'sin':
-            uv = uv_grid(h,w).view(1,2,h,w)
-            grid = torch.cat([torch.sin(uv[:,:1]),torch.sin(uv[:,1:]),torch.sin(uv[:,:1])*torch.sin(uv[:,1:])],dim=1)
-            self.vgg_grid = grid.expand([b,-1,-1,-1])
-        elif vgg_grid == 'xyz':
-            xyz = xyz_grid(h,w,dim=0).view(1,3,h,w)
-            self.vgg_grid = xyz.expand([b,-1,-1,-1])
-        elif vgg_grid == 'uv':
-            uv = uv_grid(h,w).view(1,2,h,w)
-            self.vgg_grid = uv.expand([b,-1,-1,-1])
-        elif vgg_grid == 'geo':
-            uv = uv_grid(h,w).view(1,2,h,w)
-            grid = torch.cat([torch.sin(uv[:,:1]),torch.cos(uv[:,:1]),torch.sin(uv[:,1:]),torch.cos(uv[:,1:]),torch.cos(uv[:,:1])*torch.cos(uv[:,1:])],dim=1)
-            self.vgg_grid = grid.expand([b,-1,-1,-1])
-        elif vgg_grid == 'disctn':
-            uv = uv_grid(h,w).view(1,2,h,w)
-            grid = torch.cat([torch.sin(uv[:,:1]),torch.cos(uv[:,:1]),torch.sin(uv[:,1:]),torch.cos(uv[:,1:]),torch.sin(uv[:,:1])*torch.sin(uv[:,1:])],dim=1)
-            self.vgg_grid = grid.expand([b,-1,-1,-1])
-        else:
-            raise KeyError
+        uv = uv_grid(h,w).view(1,2,h,w)
+        grid = torch.cat([torch.sin(uv[:,:1]),torch.cos(uv[:,:1]),torch.sin(uv[:,1:]),torch.cos(uv[:,1:]),torch.cos(uv[:,:1])*torch.cos(uv[:,1:])],dim=1)
+        self.vgg_grid = grid.expand([b,-1,-1,-1])
 
     def forward(self, inputs):
         if not self.vgg is None:
-
-            if self.vgg_grid is None \
-                or not self.vgg_grid.shape[0] == inputs.shape[0] \
-                or not tuple(self.vgg_grid.shape[-2:]) == tuple(inputs.shape[-2:]):
-                self.register_embed(inputs.shape)
-                self.vgg_feats = None
-
-            if self.training:
-                self.vgg_feats = None
-                feats = self.vgg(self.vgg_grid)
-
-            elif self.vgg_feats is None:
-                self.vgg_feats = self.vgg(self.vgg_grid)
-                feats = self.vgg_feats
-    
-            else:
-                feats = self.vgg_feats
-
+            self.register_embed(inputs.shape)
+            feats = self.vgg(self.vgg_grid)
 
         x = inputs
         x0 = self.layer0(x)

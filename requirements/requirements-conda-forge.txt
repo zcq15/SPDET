@@ -2,3 +2,8 @@
 #openexr-python
 #cgal
 #eigen
+
+plyfile
+timm
+# trimesh
+python

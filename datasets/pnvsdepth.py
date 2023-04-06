@@ -93,7 +93,7 @@ class PNVSDepth(Dataset):
         rgb_tar_aug = self.to_tensor(rgb_tar_aug.copy())
         rgb_tar = self.to_tensor(rgb_tar.copy())
 
-        pos_zero = torch.zeros([3,1,1]+list(self.imgsize),dtype=torch.float32)
+        pos_zero = torch.zeros([3,1,1],dtype=torch.float32)
         pos_rel = torch.from_numpy(np.array([-(pos_tar[1]-pos_src[1]),pos_tar[0]-pos_src[0],pos_tar[2]-pos_src[2]],dtype=np.float32)/1000).view(3,1,1)
 
         if self.area == 'train' and self.aug and random.random() < aug_prob:

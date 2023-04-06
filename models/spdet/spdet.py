@@ -13,7 +13,6 @@ from collections import OrderedDict
 from functools import reduce
 from .modules import Embed, Transformer, Reassemble, Fusion, Head
 
-
 class SPDET(nn.Module):
     def __init__(self, in_channels=3, out_channels=1, imgsize=None, embed_dim=768, fusion_dim=256, **kargs):
         super().__init__()
@@ -59,6 +58,8 @@ class SPDET(nn.Module):
 
         _output = OrderedDict()
         _output['src_depth'] = predict
+
+        # print([equi.shape, predict.shape])
 
         return _input,_output
 

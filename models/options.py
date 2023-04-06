@@ -63,7 +63,6 @@ class Options(object):
         self.add_argument('arch','--suffix', type=str, default=None, help='the id to save and load model')
         self.add_argument(['arch','model'],'--model', type=str, default='PanoNVS', help='the model name')
         self.add_argument(['arch','data'],'--dataset', type=str, default='PNVS', help='the dataset used')
-        self.add_argument(['arch','data'],'--testset', type=str, default=None, help='the testset used')
         self.add_argument('arch','--mode', type=str, default='train', help='train | val | test')
         self.add_argument('arch','--rand', default=False, help='random')
         self.add_argument('arch','--eval', default=False, help='')
@@ -72,47 +71,43 @@ class Options(object):
         self.add_argument('arch','--port', type=int, default=9091,help="tcp port for nccl")
         self.add_argument([],'--local_rank', type=int, default=0, help="local rank for DDP")
         self.add_argument('arch','--rank', type=int, default=0,help="local rank for DDP")
-
+        
         self.add_argument('data','--datadir', type=str, default='/home/zcq19/dataset', help='the dataset dir')
-        self.add_argument('data','--testdir', type=str, default='/home/zcq19/dataset', help='the dataset dir')
-        self.add_argument('data','--imgsize', type=int, default=None, nargs='+', help='the imagesize')
-        self.add_argument('data','--trainsize', type=int,  default=None, nargs='+', help='the imagesize')
-        self.add_argument('data','--testsize', type=int, default=None, nargs='+', help='the imagesize')
-        self.add_argument('data','--min', type=float, default=0.1, help='')
+        self.add_argument('data','--imgsize', type=int, default=[256,512], nargs='+', help='the imagesize')
+        self.add_argument('data','--min', type=float, default=0.3, help='')
         self.add_argument('data','--max', type=float, default=10.0, help='')
         self.add_argument('data','--batch_size', type=int, default=64, help='input batch size')
         self.add_argument('data','--threads', type=int, default=16, help='number of threads to load data')
-        self.add_argument('data','--droplast', type=bool,default=True, help='number of threads to load data')
+        self.add_argument('data','--droplast', default=True, help='number of threads to load data')
         self.add_argument('data','--shuffle', action='store_false', help='shuffle the input data')
 
         self.add_argument('model','--padding', type=str, default='circpad', help='')
 
+        # self.add_argument('model','--views', type=int, default=3, help='')
+        # self.add_argument('model','--hypos', type=int, default=[], nargs='+', help='')
+        # self.add_argument('model','--ranges', type=float, default=None, nargs='+', help='')
+        # self.add_argument('model','--inter', type=str, default='lin', help='')
+        # self.add_argument('model','--start', type=float, default=0.3, help='')
+        # self.add_argument('model','--end', type=float, default=10.0, help='')
+        # self.add_argument('model','--task', type=str, default='nvs', help='')
+        # self.add_argument('model','--layers', type=int, default=3, help='')
+        # self.add_argument('model','--attention', default=True, help='')
+        # self.add_argument('model','--autoencoder', default=False, help='')
+        
         self.add_argument('optim',['--weights','-w'], type=str, default=None, nargs='*', action=ParseKwargs)
-        self.add_argument('optim','--weighted', default=True, help='')
-        self.add_argument('optim','--supervise', type=str, default='scatter', help='')
-        self.add_argument('optim','--align', default=False, help='')
-        self.add_argument('optim','--upscale', type=int, default=2, help='')
-        self.add_argument('optim','--downscale', type=int, default=2, help='')
-        self.add_argument('optim','--wind', type=int, default=7, help='')
-        self.add_argument('optim','--std', type=float, default=1.5, help='')
-        self.add_argument('optim','--dist', type=str, default='l1', help='')
-        self.add_argument('optim','--view', type=str, default='cube', help='')
-        self.add_argument('optim','--filter', default=True, help='')
-        self.add_argument('optim','--pmth', type=float, default=0.5, help='')
-        self.add_argument('optim','--pmwarmup', type=int, default=0, help='')
+        self.add_argument('optim','--supervise', type=str, default=None, help='optimizer')
 
         self.add_argument('optim','--optim', type=str, default='Adam', help='optimizer')
-        self.add_argument('optim','--load_optim', default=False, help='')
         self.add_argument('optim','--beta1', type=float, default=0.9, help='')
         self.add_argument('optim','--beta2', type=float, default=0.999, help='')
-        self.add_argument('optim','--epochs', type=int, default=30, help='the all epochs')
+        self.add_argument('optim','--epochs', type=int, default=100, help='the all epochs')
         self.add_argument('optim','--lr', type=float, default=1e-4, help='learning rate')
-        self.add_argument('optim','--lr_decay', type=float, default=0.1, help='learning rate decay')
+        self.add_argument('optim','--lr_decay', type=float, default=1.0, help='learning rate decay')
         self.add_argument('optim','--weight_decay', type=float, default=0, help='learning rate decay')
         self.add_argument('optim','--lr_update', type=int, default=-1, help='learning rate update frequency')
-        self.add_argument('optim','--lr_patience', type=int, default=10, help='learning rate update frequency')
-        self.add_argument('optim','--lr_min', type=float, default=1e-5, help='min learning rate')
+        self.add_argument('optim','--lr_min', type=float, default=1e-6, help='min learning rate')
         self.add_argument('optim','--unused', default=False, help='find unused parameters')
+        # self.add_argument('optim','--grad_clip', type=float, default=0, help='')
 
         self.add_argument('logs','--overview', default=False, help='')
         self.add_argument('logs','--checkpoints', type=str, default='./checkpoints', help='models are saved here')
@@ -120,61 +115,12 @@ class Options(object):
         self.add_argument('logs','--logs', type=str, default='./logs', help='training information are saved here')
         self.add_argument('logs',['--load_epoch', '-le'], type=int, default=-1, help='select checkpoint, default is the latest')
         self.add_argument('logs',['--reload', '-r'], action='store_true', help='resume from checkpoint')
-        self.add_argument('logs',['--reset_epoch', '-re'], default=False, help='reset epoch')
+        self.add_argument('logs','--reset_epoch', default=False, help='reset epoch')
 
         self.add_argument('logs','--timestamp', default='', help='reset epoch')
         self.add_argument('logs','--debug', default=False, help='save images when testing/evaluating')
         self.add_argument('logs','--savedir', type=str, default='./results', help='dir to save the results')
         self.add_argument('logs','--saveimg', default=True, help='save images when testing/evaluating')
-
-
-    def get_imgsize(self,dataset):
-        if 'PNVS' in dataset:
-            return (256,512)
-        elif '3D60' in dataset:
-            return (256,512)
-        elif 'Stanford2D3DS' in dataset:
-            return (512,1024)
-        elif 'Matterport3D' in dataset:
-            return (512,1024)
-        elif 'PanoSUNCG' in dataset:
-            return (256,512)
-        elif '360SD' in dataset:
-            return (256,512)
-        elif 'Structured3D' in dataset:
-            return (256,512)
-        elif 'Joint360Depth' in dataset:
-            return (256,512)
-        elif '360VO' in dataset:
-            return (256,512)
-        elif '360Lightfield' in dataset:
-            return (256,512)
-        else:
-            return (256,512)
-    
-    def get_datadir(self,dataset,datadir):
-        if 'PNVS' in dataset:
-            return os.path.join(datadir,'PNVS')
-        elif '3D60' in dataset:
-            return os.path.join(datadir,'3D60')
-        elif 'Stanford2D3DS' in dataset:
-            return os.path.join(datadir,'Stanford2D3DS')
-        elif 'Matterport3D' in dataset:
-            return os.path.join(datadir,'Matterport3D')
-        elif 'PanoSUNCG' in dataset:
-            return os.path.join(datadir,'PanoSUNCG')
-        elif '360SD' in dataset:
-            return os.path.join(datadir,'360SD')
-        elif 'Structured3D' in dataset:
-            return os.path.join(datadir,'Structured3D')
-        elif 'Joint360Depth' in dataset:
-            return os.path.join(datadir,'Joint360Depth')
-        elif '360VO' in dataset:
-            return os.path.join(datadir,'360VO')
-        elif '360Lightfield' in dataset:
-            return os.path.join(datadir,'360Lightfield')
-        else:
-            return os.path.join(datadir,dataset)
 
     def paser(self,log=True):
         self._init_parser()
@@ -189,12 +135,24 @@ class Options(object):
                 elif v.lower() == 'none':
                     setattr(self.opt,k,None)
 
-        if self.opt.imgsize is None: self.opt.imgsize = self.get_imgsize(self.opt.dataset)
-        if self.opt.testset is None: self.opt.testset = self.opt.dataset
-        if self.opt.testdir is None: self.opt.testdir = self.opt.datadir
-        self.opt.datadir = self.get_datadir(self.opt.dataset,self.opt.datadir)
-        self.opt.testdir = self.get_datadir(self.opt.testset,self.opt.testdir)
+        self.opt.imgsize = tuple(self.opt.imgsize)
+        if isinstance(self.opt.hypos,int): self.opt.hypos = [self.opt.hypos]
+        if isinstance(self.opt.ranges,float): self.opt.ranges = [self.opt.ranges]
 
+        if 'PNVS' in self.opt.dataset:
+            self.opt.datadir = os.path.join(self.opt.datadir,'PNVS')
+        elif 'Replica' in self.opt.dataset:
+            # self.opt.datadir = os.path.join(self.opt.datadir,'Replica360')
+            self.opt.datadir = os.path.join(self.opt.datadir,'MatryODShkaReplica360')
+        elif '3D60' in self.opt.dataset:
+            self.opt.datadir = os.path.join(self.opt.datadir,'3D60')
+        elif 'Matterport3D' in self.opt.dataset:
+            self.opt.datadir = os.path.join(self.opt.datadir,'Matterport3D')
+        elif 'Structured3D' in self.opt.dataset:
+            self.opt.datadir = os.path.join(self.opt.datadir,'Structured3D')
+        else:
+            self.opt.datadir = os.path.join(self.opt.datadir,self.opt.dataset)
+        
         if 'LOCAL_RANK' in os.environ: self.opt.local_rank = int(os.environ['LOCAL_RANK'])
         self.opt.rank = self.opt.local_rank
         if self.opt.local_rank == 0: os.makedirs(self.opt.checkpoints,exist_ok=True)
@@ -205,8 +163,8 @@ class Options(object):
         if self.opt.threads == 0:
             self.opt.threads = self.opt.batch_size
 
-        # assert not self.opt.gpus is None or "CUDA_VISIBLE_DEVICES" in os.environ
-        # if not self.opt.gpus is None: os.environ["CUDA_VISIBLE_DEVICES"] = self.opt.gpus
+        assert not self.opt.gpus is None or "CUDA_VISIBLE_DEVICES" in os.environ
+        if not self.opt.gpus is None: os.environ["CUDA_VISIBLE_DEVICES"] = self.opt.gpus
         if self.opt.gpus is None: self.opt.gpus = os.environ["CUDA_VISIBLE_DEVICES"]
         os.environ["CUDA_LAUNCH_BLOCKING"]="1"
         os.environ["CUBLAS_WORKSPACE_CONFIG"]=":16:8"

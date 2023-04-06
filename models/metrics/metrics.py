@@ -9,10 +9,9 @@ import sys
 sys.path.append('.')
 sys.path.append('..')
 
-from ..modules import _make_pad,spherical_interpolate
+from ..modules import _make_pad
 from .ssim_thirdparty import ssim_loss
 from ..geometry.imaging import CETransform
-from ..gargs import _args
 
 ################################################################################
 
@@ -51,13 +50,6 @@ class Photometric(torch.nn.Module):
             return torch.tensor(0,dtype=torch.float32).cuda()
         pred = _output[self.branch]
         target = _input[self.target]
-        
-        if 'upscale' in _args['optim'] and 'downscale' in _args['optim']:
-            if not _args['optim']['upscale'] == _args['optim']['downscale']:
-                target = spherical_interpolate(target,_args['optim']['upscale'],_args['optim']['downscale'])
-                mask_in = spherical_interpolate(mask_in.type(torch.float32),_args['optim']['upscale'],_args['optim']['downscale']).type(torch.bool) > 0.5
-                if not ref is None:
-                    ref = spherical_interpolate(ref,_args['optim']['upscale'],_args['optim']['downscale'])
 
         b,_,h,w = target.shape
 
@@ -88,7 +80,7 @@ class Photometric(torch.nn.Module):
 
 class Perceptual(torch.nn.Module):
     def __init__(self, branch='tar_rgb', target='tar_rgb',valid='src_valid',
-                vgg='vgg19', view='cube', dist='l1',
+                vgg='vgg19', view='equi', dist='l1',
                 indices=[2, 7, 12, 21, 30],
                 weights=[1.0/2.6, 1.0/4.8, 1.0/3.7, 1.0/5.6, 10/1.5]
     ):
@@ -272,6 +264,37 @@ class UVSmooth(torch.nn.Module):
         smooth = pred*torch.exp(-target)
         return smooth.mean()*h
 
+class Smooth(torch.nn.Module):
+    def __init__(self, branch='src_depth', target='source', grid='sobel'):
+        super().__init__()
+        self.branch = branch
+        self.target = target
+        self.pad = _make_pad(1)
+
+        self.sobel = torch.tensor([[[[0,0,0],[-1,0,1],[0,0,0]]],[[[0,-1,0],[0,0,0],[0,1,0]]]]).type(torch.float32).cuda()
+        self.laplacian = torch.tensor([[[[0,0,0],[1,-2,1],[0,0,0]]],[[[0,1,0],[0,-2,0],[0,1,0]]]]).type(torch.float32).cuda()
+        assert grid in ['laplacian','sobel']
+        self.grid = self.laplacian if grid == 'laplacian' else self.sobel
+
+    def forward(self,_output,_input):
+        if not self.branch in _output or not self.target in _input:
+            return torch.tensor(0,dtype=torch.float32).cuda()
+        pred = _output[self.branch]
+        target = _input[self.target]
+
+        b,c,h,w = pred.shape
+        pred = pred.view(b*c,1,h,w)
+        grad = torch.nn.functional.conv2d(pred,self.grid)
+        pred = grad.view(b,c*2,h-2,w-2).norm(p=2,dim=1,keepdim=True)
+        
+        b,c,h,w = target.shape
+        target = target.view(b*c,1,h,w)
+        grad = torch.nn.functional.conv2d(target,self.grid)
+        target = grad.view(b,c*2,h-2,w-2).norm(p=2,dim=1,keepdim=True)
+
+        smooth = pred*torch.exp(-target)
+        return smooth.mean()
+
 class BerHu(nn.Module):
     def __init__(self,branch='src_depth',target='src_depth',valid='src_valid',th=0.2,min=0,max=10.0):
         super(BerHu,self).__init__()
@@ -308,3 +331,62 @@ class BerHu(nn.Module):
         loss2 = ((delta.pow(2)+T.pow(2))/(2*T))[mask2]
         loss = (loss1.sum()+loss2.sum())/(loss1.numel()+loss2.numel())
         return loss
+
+class L1(torch.nn.Module):
+    def __init__(self, branch='rgb_rays', target='rgb_rays',valid='src_valid'):
+        super().__init__()
+        self.branch = branch
+        self.target = target
+        self.valid = valid
+
+    def forward(self,_output,_input):
+        if not self.branch in _output or not self.target in _input:
+            return torch.tensor(0,dtype=torch.float32).cuda()
+    
+        pred = _output[self.branch]
+        target = _input[self.target]
+
+        if self.valid in _input:
+            mask = _input[self.valid]
+            if not tuple(mask.shape) == tuple(target.shape):
+                mask = mask.expand_as(target)
+        else:
+            mask = torch.ones_like(target,dtype=torch.bool,device=target.device)
+
+        loss = torch.tensor(0,dtype=torch.float32).cuda()
+        for b in range(_input[self.target].shape[0]):
+            m = mask[b]
+            if torch.any(m):
+                p = pred[b][m]
+                t = target[b][m]
+                loss += (p-t).abs().mean()
+            else:
+                loss += 0*pred[b].abs().mean()
+        if _input[self.target].shape[0] > 0:
+            loss = loss/_input[self.target].shape[0]
+
+        return loss
+
+class PSNR(torch.nn.Module):
+    def __init__(self, branch='tar_rgb', target='tar_rgb', eps=1e-5):
+        super().__init__()
+        self.branch = branch
+        self.target = target
+        self.eps = eps
+
+    def forward(self,_output,_input):
+        with torch.no_grad():
+            if not self.branch in _output or not self.target in _input:
+                return torch.tensor(0,dtype=torch.float32).cuda()
+            pred = _output[self.branch].clone().detach()
+            target = _input[self.target].clone().detach()
+
+            b,c,h,w = pred.shape
+
+            mse = (pred-target).pow(2)
+
+            psnr = 0
+            for i in range(b):
+                psnr += 10*torch.log10((1.0**2+self.eps**2)/(mse[i].mean()+self.eps**2))
+
+            return psnr/b

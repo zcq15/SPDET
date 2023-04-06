@@ -20,11 +20,11 @@ cv2.setNumThreads(0)
 cv2.ocl.setUseOpenCL(False)
 
 class ThreeD60(Dataset):
-    def __init__(self,datadir,area,split=['s2d3d','m3d'],aug=False,local_rank=0):
+    def __init__(self,datadir,area,imgsize=(256,512),split=['s2d3d','m3d'],aug=False,local_rank=0):
         super().__init__()
         self.datadir = os.path.normpath(datadir)
         self.area = area
-        self.imgsize = (256,512)
+        self.imgsize = imgsize
         self.files = []
         assert area in ['train','val','test']
         if area == 'train':
@@ -90,7 +90,7 @@ class ThreeD60(Dataset):
         else:
             pos_rel = torch.tensor([0,0,0.26],dtype=torch.float32).view([3,1,1])
         
-        pos_zero = torch.zeros([3,1,1]+list(self.imgsize),dtype=torch.float32)
+        pos_zero = torch.zeros([3,1,1],dtype=torch.float32)
 
         if self.area == 'train' and self.aug and random.random() < aug_prob:
             pos_rel[1] = - pos_rel[1]
