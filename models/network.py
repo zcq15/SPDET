@@ -265,6 +265,7 @@ class Network(object):
             for param_group in self.optimizer.param_groups:
                 param_group["lr"] = lr
         # if self.rank == 0: print("Learning rate: {:.3e}".format(lr))
+        self.reset_optimizer()
 
         volumes = OrderedDict({'Size':0})
         for key in weights:
